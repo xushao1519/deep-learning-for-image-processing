@@ -9,7 +9,7 @@ class NMEMetric:
         self.counter = 0.
         self.hw_tensor = torch.as_tensor([h, w]).reshape([1, 1, 2])
 
-    def update(self, pred: torch.Tensor, gt: torch.Tensor, mask: torch.Tensor):
+    def update(self, pred: torch.Tensor, gt: torch.Tensor, mask: torch.Tensor = None):
         """
         Args:
             pred (shape [N, K, 2]): pred keypoints
@@ -28,7 +28,10 @@ class NMEMetric:
         ion = (pred[:, self.keypoint_idxs] - gt[:, self.keypoint_idxs]).pow(2).sum(dim=(1, 2)).pow(0.5)
 
         valid_ion_mask = ion > 0
-        mask = torch.logical_and(mask, valid_ion_mask.unsqueeze_(dim=1))
+        if mask is None:
+            mask = valid_ion_mask.unsqueeze(dim=1)
+        else:
+            mask = torch.logical_and(mask, valid_ion_mask.unsqueeze_(dim=1))
         num_valid = (mask.sum(dim=1) > 0).sum().item()
 
         # avoid divide by zero

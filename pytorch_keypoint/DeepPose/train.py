@@ -66,14 +66,14 @@ def main(args):
     # config dataset and dataloader
     data_transform = {
         "train": transforms.Compose([
-            transforms.Resize(224, 224),
+            transforms.AffineTransform(scale=(0.65, 1.35), rotation=(-45, 45), fixed_size=(256, 256)),
             transforms.RandomHorizontalFlip(0.5),
-            transforms.MatToTensor(),
+            transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ]),
         "val": transforms.Compose([
-            transforms.Resize(224, 224),
-            transforms.MatToTensor(),
+            transforms.AffineTransform(scale=None, rotation=None, fixed_size=(256, 256)),
+            transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
     }
@@ -129,10 +129,9 @@ def main(args):
         # train
         model.train()
         train_bar = tqdm(train_loader, file=sys.stdout)
-        for step, (imgs, labels, mask) in enumerate(train_bar):
+        for step, (imgs, targets) in enumerate(train_bar):
             imgs = imgs.to(device)
-            labels = labels.to(device)
-            mask = mask.to(device)
+            labels = targets["keypoint"].to(device)
 
             optimizer.zero_grad()
             # use mixed precision to speed up training
@@ -157,13 +156,12 @@ def main(args):
         with torch.inference_mode():
             metric = NMEMetric(h=224, w=224)
             eval_bar = tqdm(val_loader, file=sys.stdout, desc="evaluation")
-            for step, (imgs, labels, mask) in enumerate(eval_bar):
+            for step, (imgs, targets) in enumerate(eval_bar):
                 imgs = imgs.to(device)
-                labels = labels.to(device)
-                mask = mask.to(device)
+                labels = targets["keypoint"].to(device)
 
                 pred = model(imgs)
-                metric.update(pred.reshape((-1, num_keypoints, 2)), labels, mask)
+                metric.update(pred.reshape((-1, num_keypoints, 2)), labels)
 
             nme = metric.evaluate()
             tb_writer.add_scalar("evaluation nme", nme, global_step=epoch)

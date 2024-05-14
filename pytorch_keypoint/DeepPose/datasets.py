@@ -2,7 +2,6 @@ import os
 from typing import List
 
 import cv2
-import torch
 import torch.utils.data as data
 import numpy as np
 
@@ -36,7 +35,7 @@ class WFLWDataset(data.Dataset):
         assert os.path.exists(self.anno_path), "file '{}' does not exist.".format(self.anno_path)
 
         self.transforms = transforms
-        self.keypoints: List[torch.Tensor] = []
+        self.keypoints: List[np.ndarray] = []
         self.face_rects: List[List[int]] = []
         self.img_paths: List[str] = []
         with open(self.anno_path, "rt") as f:
@@ -46,15 +45,9 @@ class WFLWDataset(data.Dataset):
 
                 split_list = line.strip().split(" ")
                 keypoint_ = self.get_98_points(split_list)
-                keypoint = torch.as_tensor(keypoint_, dtype=torch.float32).reshape((-1, 2))
+                keypoint = np.array(keypoint_, dtype=np.float32).reshape((-1, 2))
                 face_rect = list(map(int, split_list[196: 196 + 4]))  # xmin, ymin, xmax, ymax
                 img_name = split_list[-1]
-                # absolute coordinate to relative coordinate
-                keypoint[:, 0] -= face_rect[0]
-                keypoint[:, 1] -= face_rect[1]
-                # normalize coordinate to 0~1
-                keypoint[:, 0] /= face_rect[2] - face_rect[0]
-                keypoint[:, 1] /= face_rect[3] - face_rect[1]
 
                 self.keypoints.append(keypoint)
                 self.face_rects.append(face_rect)
@@ -77,15 +70,15 @@ class WFLWDataset(data.Dataset):
         img_bgr = cv2.imread(self.img_paths[idx], flags=cv2.IMREAD_COLOR)
         img = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
 
-        xmin, ymin, xmax, ymax = self.face_rects[idx]
-        crop_img = img[ymin:ymax, xmin:xmax]
-        keypoint = self.keypoints[idx]
-        mask = (keypoint > 0).sum(dim=1) == 2  # > 0 and < 1
+        target = {
+            "box": self.face_rects[idx],
+            "keypoint": self.keypoints[idx]
+        }
 
         if self.transforms is not None:
-            crop_img, keypoint = self.transforms(crop_img, keypoint)
+            img, target = self.transforms(img, target)
 
-        return crop_img, keypoint, mask
+        return img, target
 
     def __len__(self):
         return len(self.keypoints)
@@ -99,5 +92,9 @@ if __name__ == '__main__':
     print(len(eval_dataset))
 
     from utils import draw_keypoints
-    img, keypoint = train_dataset[0]
-    draw_keypoints(np.array(img), keypoint.numpy(), "test_plot.jpg")
+    img, target = train_dataset[0]
+    keypoint = target["keypoint"]
+    h, w, c = img.shape
+    keypoint[:, 0] /= w
+    keypoint[:, 1] /= h
+    draw_keypoints(img, keypoint, "test_plot.jpg")
