@@ -1,7 +1,8 @@
 import os
-from typing import List
+from typing import List, Tuple
 
 import cv2
+import torch
 import torch.utils.data as data
 import numpy as np
 
@@ -66,12 +67,32 @@ class WFLWDataset(data.Dataset):
     def get_98_points(keypoints: List[str]) -> List[float]:
         return list(map(float, keypoints[:196]))
 
+    @staticmethod
+    def collate_fn(batch_infos: List[Tuple[torch.Tensor, dict]]):
+        imgs, ori_keypoints, keypoints, m_invs = [], [], [], []
+        for info in batch_infos:
+            imgs.append(info[0])
+            ori_keypoints.append(info[1]["ori_keypoint"])
+            keypoints.append(info[1]["keypoint"])
+            m_invs.append(info[1]["m_inv"])
+
+        imgs_tensor = torch.stack(imgs)
+        keypoints_tensor = torch.stack(keypoints)
+        ori_keypoints_tensor = torch.stack(ori_keypoints)
+        m_invs_tensor = torch.stack(m_invs)
+
+        targets = {"ori_keypoints": ori_keypoints_tensor,
+                   "keypoints": keypoints_tensor,
+                   "m_invs": m_invs_tensor}
+        return imgs_tensor, targets
+
     def __getitem__(self, idx: int):
         img_bgr = cv2.imread(self.img_paths[idx], flags=cv2.IMREAD_COLOR)
         img = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
 
         target = {
             "box": self.face_rects[idx],
+            "ori_keypoint": self.keypoints[idx],
             "keypoint": self.keypoints[idx]
         }
 

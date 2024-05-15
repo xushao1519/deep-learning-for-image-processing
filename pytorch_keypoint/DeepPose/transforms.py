@@ -31,11 +31,32 @@ def adjust_box(xmin: int, ymin: int, xmax: int, ymax: int, fixed_size: Tuple[int
     return xmin, ymin, xmax, ymax
 
 
-def affine_points(keypoint: np.ndarray, M: np.ndarray):
+def affine_points_np(keypoint: np.ndarray, m: np.ndarray):
+    """
+    Args:
+        keypoint [k, 2]
+        m [2, 3]
+    """
     ones = np.ones((keypoint.shape[0], 1), dtype=np.float32)
-    keypoint = np.concatenate([keypoint, ones], axis=1).T
-    new_keypoint = np.dot(M, keypoint)
-    return new_keypoint.T
+    keypoint = np.concatenate([keypoint, ones], axis=1)  # [k, 3]
+    new_keypoint = np.matmul(keypoint, m.T)
+    return new_keypoint
+
+
+def affine_points_torch(keypoint: torch.Tensor, m: torch.Tensor) -> torch.Tensor:
+    """
+    Args:
+        keypoint [n, k, 2]
+        m [n, 2, 3]
+    """
+    dtype = keypoint.dtype
+    device = keypoint.device
+
+    n, k, _ = keypoint.shape
+    ones = torch.ones(size=(n, k, 1), dtype=dtype, device=device)
+    keypoint = torch.concat([keypoint, ones], dim=2)  # [n, k, 3]
+    new_keypoint = torch.matmul(keypoint, m.transpose(1, 2))
+    return new_keypoint
 
 
 class Compose(object):
@@ -67,7 +88,9 @@ class ToTensor(object):
         image = torch.from_numpy(image).permute((2, 0, 1))
         image = image.to(torch.float32) / 255.
 
+        target["ori_keypoint"] = torch.from_numpy(target["ori_keypoint"])
         target["keypoint"] = torch.from_numpy(target["keypoint"])
+        target["m_inv"] = torch.from_numpy(target["m_inv"])
         return image, target
 
 
@@ -148,19 +171,19 @@ class AffineTransform(object):
         src = np.stack([src_center, src_p2, src_p3])
         dst = np.stack([dst_center, dst_p2, dst_p3])
 
-        trans = cv2.getAffineTransform(src, dst)  # 计算正向仿射变换矩阵
-        reverse_trans = cv2.getAffineTransform(dst, src)  # 计算逆向仿射变换矩阵，方便后续还原
+        m = cv2.getAffineTransform(src, dst).astype(np.float32)  # 计算正向仿射变换矩阵
+        m_inv = cv2.getAffineTransform(dst, src).astype(np.float32)  # 计算逆向仿射变换矩阵，方便后续还原
 
         # 对图像进行仿射变换
         warp_img = cv2.warpAffine(src=img,
-                                  M=trans,
+                                  M=m,
                                   dsize=tuple(self.fixed_size[::-1]),  # [w, h]
                                   borderMode=cv2.BORDER_CONSTANT,
                                   borderValue=(0, 0, 0),
                                   flags=cv2.INTER_LINEAR)
 
         keypoint = target["keypoint"]
-        keypoint = affine_points(keypoint, trans)
+        keypoint = affine_points_np(keypoint, m)
         target["keypoint"] = keypoint
 
         # from utils import draw_keypoints
@@ -168,6 +191,6 @@ class AffineTransform(object):
         # keypoint[:, 1] /= self.fixed_size[0]
         # draw_keypoints(warp_img, keypoint, "affine.jpg", 2)
 
-        target["trans"] = trans
-        target["reverse_trans"] = reverse_trans
+        target["m"] = m
+        target["m_inv"] = m_inv
         return warp_img, target

@@ -10,9 +10,10 @@ class L1Loss(nn.Module):
 
     def forward(self, pred: torch.Tensor, label: torch.Tensor, mask: torch = None) -> torch.Tensor:
         """
-        pred: [N, K, 2]
-        label: [N, K, 2]
-        mask: [N, K]
+        Args:
+            pred [N, K, 2]
+            label [N, K, 2]
+            mask [N, K]
         """
         losses = F.l1_loss(pred, label, reduction="none")
         if mask is not None:
@@ -28,9 +29,10 @@ class SmoothL1Loss(nn.Module):
 
     def forward(self, pred: torch.Tensor, label: torch.Tensor, mask: torch = None) -> torch.Tensor:
         """
-        pred: [N, K, 2]
-        label: [N, K, 2]
-        mask: [N, K]
+        Args:
+            pred [N, K, 2]
+            label [N, K, 2]
+            mask [N, K]
         """
         losses = F.smooth_l1_loss(pred, label, reduction="none")
         if mask is not None:
@@ -46,9 +48,10 @@ class L2Loss(nn.Module):
 
     def forward(self, pred: torch.Tensor, label: torch.Tensor, mask: torch = None) -> torch.Tensor:
         """
-        pred: [N, K, 2]
-        label: [N, K, 2]
-        mask: [N, K]
+        Args:
+            pred [N, K, 2]
+            label [N, K, 2]
+            mask [N, K]
         """
         losses = F.mse_loss(pred, label, reduction="none")
         if mask is not None:
@@ -69,9 +72,10 @@ class WingLoss(nn.Module):
 
     def forward(self, pred: torch.Tensor, label: torch.Tensor, mask: torch = None) -> torch.Tensor:
         """
-        pred: [N, K, 2]
-        label: [N, K, 2]
-        mask: [N, K]
+        Args:
+            pred [N, K, 2]
+            label [N, K, 2]
+            mask [N, K]
         """
         delta = (pred - label).abs()
         losses = torch.where(condition=self.w > delta,
@@ -96,9 +100,10 @@ class SoftWingLoss(nn.Module):
 
     def forward(self, pred: torch.Tensor, label: torch.Tensor, mask: torch = None) -> torch.Tensor:
         """
-        pred: [N, K, 2]
-        label: [N, K, 2]
-        mask: [N, K]
+        Args:
+            pred [N, K, 2]
+            label [N, K, 2]
+            mask [N, K]
         """
         delta = (pred - label).abs()
         losses = torch.where(condition=delta < self.omega1,

@@ -2,12 +2,11 @@ import torch
 
 
 class NMEMetric:
-    def __init__(self, h: int, w: int) -> None:
+    def __init__(self) -> None:
         # 两眼外角点对应keypoint索引
         self.keypoint_idxs = [60, 72]
         self.nme_accumulator = 0.
         self.counter = 0.
-        self.hw_tensor = torch.as_tensor([h, w]).reshape([1, 1, 2])
 
     def update(self, pred: torch.Tensor, gt: torch.Tensor, mask: torch.Tensor = None):
         """
@@ -16,13 +15,7 @@ class NMEMetric:
             gt (shape [N, K, 2]): gt keypoints
             mask (shape [N, K]): valid keypoints mask
         """
-        dtype = pred.dtype
-        device = pred.device
 
-        # rel coord to abs coord
-        hw_tensor = self.hw_tensor.to(device=device, dtype=dtype)
-        pred = pred * hw_tensor
-        gt = gt * hw_tensor
         l2_loss = (pred - gt).pow(2).mean(dim=(1, 2))
         # ion: inter-ocular distance normalized error
         ion = (pred[:, self.keypoint_idxs] - gt[:, self.keypoint_idxs]).pow(2).sum(dim=(1, 2)).pow(0.5)

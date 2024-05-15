@@ -22,6 +22,7 @@ def get_args_parser(add_help=True):
     parser.add_argument("--device", type=str, default="cuda:0", help="training device, e.g. cpu, cuda:0")
     parser.add_argument("--save_weights_dir", type=str, default="./weights", help="save dir for model weights")
     parser.add_argument("--save_freq", type=int, default=5, help="save frequency for weights and generated imgs")
+    parser.add_argument('--img_hw', default=[256, 256], nargs='+', type=int, help='training image size[h, w]')
     parser.add_argument("--epochs", type=int, default=30, help="number of epochs of training")
     parser.add_argument("--batch_size", type=int, default=32, help="size of the batches")
     parser.add_argument("--num_workers", type=int, default=8, help="number of workers, default: 8")
@@ -48,6 +49,7 @@ def main(args):
     epochs = args.epochs
     bs = args.batch_size
     start_epoch = 0
+    img_hw = args.img_hw
     os.makedirs(save_weights_dir, exist_ok=True)
 
     if "cuda" in args.device and not torch.cuda.is_available():
@@ -66,13 +68,13 @@ def main(args):
     # config dataset and dataloader
     data_transform = {
         "train": transforms.Compose([
-            transforms.AffineTransform(scale=(0.65, 1.35), rotation=(-45, 45), fixed_size=(256, 256)),
+            transforms.AffineTransform(scale=(0.65, 1.35), rotation=(-45, 45), fixed_size=img_hw),
             transforms.RandomHorizontalFlip(0.5),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ]),
         "val": transforms.Compose([
-            transforms.AffineTransform(scale=None, rotation=None, fixed_size=(256, 256)),
+            transforms.AffineTransform(scale=None, rotation=None, fixed_size=img_hw),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
@@ -88,13 +90,15 @@ def main(args):
                               batch_size=bs,
                               shuffle=True,
                               pin_memory=True,
-                              num_workers=num_workers)
+                              num_workers=num_workers,
+                              collate_fn=WFLWDataset.collate_fn)
 
     val_loader = DataLoader(val_dataset,
                             batch_size=bs,
                             shuffle=False,
                             pin_memory=True,
-                            num_workers=num_workers)
+                            num_workers=num_workers,
+                            collate_fn=WFLWDataset.collate_fn)
 
     # define loss function
     loss_func = WingLoss()
@@ -131,7 +135,7 @@ def main(args):
         train_bar = tqdm(train_loader, file=sys.stdout)
         for step, (imgs, targets) in enumerate(train_bar):
             imgs = imgs.to(device)
-            labels = targets["keypoint"].to(device)
+            labels = targets["keypoints"].to(device)
 
             optimizer.zero_grad()
             # use mixed precision to speed up training
@@ -154,14 +158,20 @@ def main(args):
         # eval
         model.eval()
         with torch.inference_mode():
-            metric = NMEMetric(h=224, w=224)
+            metric = NMEMetric()
             eval_bar = tqdm(val_loader, file=sys.stdout, desc="evaluation")
             for step, (imgs, targets) in enumerate(eval_bar):
                 imgs = imgs.to(device)
-                labels = targets["keypoint"].to(device)
+                m_invs = targets["m_invs"].to(device)
+                labels = targets["ori_keypoints"].to(device)
 
                 pred = model(imgs)
-                metric.update(pred.reshape((-1, num_keypoints, 2)), labels)
+                pred = pred.reshape((-1, num_keypoints, 2))  # [N, K, 2]
+                wh_tensor = torch.as_tensor(img_hw[::-1], dtype=pred.dtype, device=pred.device).reshape([1, 1, 2])
+                pred = pred * wh_tensor  # rel coord to abs coord
+                pred = transforms.affine_points_torch(pred, m_invs)
+
+                metric.update(pred, labels)
 
             nme = metric.evaluate()
             tb_writer.add_scalar("evaluation nme", nme, global_step=epoch)

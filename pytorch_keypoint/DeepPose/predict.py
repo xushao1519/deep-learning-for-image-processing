@@ -15,7 +15,7 @@ def main():
     weights_path = "./weights/model_weights_29.pth"
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    transform = transforms.Compose([transforms.Resize([224, 224]),
+    transform = transforms.Compose([transforms.Resize([256, 256]),
                                     transforms.ToTensor(),
                                     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
 
@@ -43,7 +43,7 @@ def main():
     # prediction
     model.eval()
     with torch.inference_mode():
-        res = torch.squeeze(model(img_tensor.to(device))).cpu()
+        res = torch.squeeze(model(img_tensor.to(device))).cpu().reshape([-1, 2])
         # print((res - label).pow(2).mean())
         draw_keypoints(np.array(img), rel_coordinate=res.numpy(), save_path="predict.jpg")
 
