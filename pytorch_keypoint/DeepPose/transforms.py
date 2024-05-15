@@ -132,19 +132,36 @@ class RandomHorizontalFlip(object):
 
 
 class AffineTransform(object):
-    """scale+rotation"""
+    """shift+scale+rotation"""
     def __init__(self,
-                 scale: Tuple[float, float] = None,  # e.g. (0.65, 1.35)
-                 rotation: Tuple[int, int] = None,   # e.g. (-45, 45)
+                 scale_factor: Tuple[float, float] = (0.65, 1.35),
+                 scale_prob: float = 1.,
+                 rotate: int = 45,
+                 rotate_prob: float = 0.6,
+                 shift_factor: float = 0.15,
+                 shift_prob: float = 0.3,
                  fixed_size: Tuple[int, int] = (256, 256)):
-        self.scale = scale
-        self.rotation = rotation
+        self.scale_factor = scale_factor
+        self.scale_prob = scale_prob
+        self.rotate = rotate
+        self.rotate_prob = rotate_prob
+        self.shift_factor = shift_factor
+        self.shift_prob = shift_prob
         self.fixed_size = fixed_size  # (h, w)
 
     def __call__(self, img: np.ndarray, target: dict):
         src_xmin, src_ymin, src_xmax, src_ymax = adjust_box(*target["box"], fixed_size=self.fixed_size)
         src_w = src_xmax - src_xmin
         src_h = src_ymax - src_ymin
+
+        if random.random() < self.shift_prob:
+            shift_w_factor = random.uniform(-self.shift_factor, self.shift_factor)
+            shift_h_factor = random.uniform(-self.shift_factor, self.shift_factor)
+            src_xmin -= int(src_w * shift_w_factor)
+            src_xmax -= int(src_w * shift_w_factor)
+            src_ymin -= int(src_h * shift_h_factor)
+            src_ymax -= int(src_h * shift_h_factor)
+
         src_center = np.array([(src_xmin + src_xmax) / 2, (src_ymin + src_ymax) / 2], dtype=np.float32)
         src_p2 = src_center + np.array([0, -src_h / 2], dtype=np.float32)  # top middle
         src_p3 = src_center + np.array([src_w / 2, 0], dtype=np.float32)   # right middle
@@ -153,15 +170,15 @@ class AffineTransform(object):
         dst_p2 = np.array([(self.fixed_size[1] - 1) / 2, 0], dtype=np.float32)  # top middle
         dst_p3 = np.array([self.fixed_size[1] - 1, (self.fixed_size[0] - 1) / 2], dtype=np.float32)  # right middle
 
-        if self.scale is not None:
-            scale = random.uniform(*self.scale)
+        if random.random() < self.scale_prob:
+            scale = random.uniform(*self.scale_factor)
             src_w = src_w * scale
             src_h = src_h * scale
             src_p2 = src_center + np.array([0, -src_h / 2], dtype=np.float32)  # top middle
             src_p3 = src_center + np.array([src_w / 2, 0], dtype=np.float32)   # right middle
 
-        if self.rotation is not None:
-            angle = random.randint(*self.rotation)  # 角度制
+        if random.random() < self.rotate_prob:
+            angle = random.randint(-self.rotate, self.rotate)  # 角度制
             angle = angle / 180 * math.pi  # 弧度制
             src_p2 = src_center + np.array([src_h / 2 * math.sin(angle),
                                             -src_h / 2 * math.cos(angle)], dtype=np.float32)

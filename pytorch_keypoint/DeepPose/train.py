@@ -68,13 +68,13 @@ def main(args):
     # config dataset and dataloader
     data_transform = {
         "train": transforms.Compose([
-            transforms.AffineTransform(scale=(0.65, 1.35), rotation=(-45, 45), fixed_size=img_hw),
+            transforms.AffineTransform(scale_factor=(0.65, 1.35), rotate=45, shift_factor=0.15, fixed_size=img_hw),
             transforms.RandomHorizontalFlip(0.5),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ]),
         "val": transforms.Compose([
-            transforms.AffineTransform(scale=None, rotation=None, fixed_size=img_hw),
+            transforms.AffineTransform(scale_prob=0., rotate_prob=0., shift_prob=0., fixed_size=img_hw),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
